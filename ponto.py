@@ -4,11 +4,10 @@ from datetime import datetime
 
 ARQUIVO_ENTRADA = "Todos os relatórios.xls"
 ARQUIVO_SAIDA = "resumo_ponto.xlsx"
-JORNADA_SEMANA = 8 * 60   # minutos
-JORNADA_SABADO = 4 * 60   # minutos
+JORNADA_SEMANA = 8 * 60
+JORNADA_SABADO = 4 * 60
 
 def parse_hora(valor):
-    """Converte HH:MM para minutos."""
     try:
         valor = str(valor).strip()
         h, m = valor.split(":")
@@ -17,57 +16,43 @@ def parse_hora(valor):
         return None
 
 def minutos_para_hhmm(minutos):
-    """Converte minutos para +HH:MM ou -HH:MM."""
     sinal = "-" if minutos < 0 else "+"
     minutos = abs(int(minutos))
     return f"{sinal}{minutos // 60:02d}:{minutos % 60:02d}"
 
 def calcular_trabalhado(horarios, dia_semana):
-    """
-    Calcula minutos trabalhados a partir de uma lista de horários.
-    Retorna (minutos, aviso)
-    """
     n = len(horarios)
+    jornada = JORNADA_SABADO if dia_semana == 5 else JORNADA_SEMANA
 
     if n == 0:
-        return None, None  # sem registro, ignora
+        return None, None
 
     if n == 1:
-        # Só um registro — incompleto
-        jornada = JORNADA_SABADO if dia_semana == 5 else JORNADA_SEMANA
-        return jornada, f"apenas 1 registro — conferir"
+        return jornada, "apenas 1 registro — conferir"
 
     if dia_semana == 5:
-        # Sábado — entrada e saída, sem almoço
         trabalhado = horarios[-1] - horarios[0]
         if trabalhado <= 0 or trabalhado > 480:
-            jornada = JORNADA_SABADO
-            return jornada, f"horário suspeito — conferir"
+            return jornada, "horário suspeito — conferir"
         return trabalhado, None
 
-    # Dia de semana
     if n == 2:
-        # Entrada e saída sem almoço — desconta 2h
         trabalhado = horarios[-1] - horarios[0] - 120
         if trabalhado <= 0 or trabalhado > 720:
-            return JORNADA_SEMANA, f"horário suspeito — conferir"
+            return jornada, "horário suspeito — conferir"
         return trabalhado, None
 
-    if n >= 3:
-        # Primeiro = entrada, último = saída
-        trabalhado = horarios[-1] - horarios[0]
-        # Desconta intervalos do meio (saída almoço até retorno)
-        for k in range(1, n - 1, 2):
-            if k + 1 <= n - 2:
-                trabalhado -= (horarios[k + 1] - horarios[k])
-        if trabalhado <= 0 or trabalhado > 720:
-            return JORNADA_SEMANA, f"{n} registros, horário suspeito — conferir"
-        return trabalhado, None
+    # 3 ou mais registros
+    trabalhado = horarios[-1] - horarios[0]
+    for k in range(1, n - 1, 2):
+        if k + 1 <= n - 2:
+            trabalhado -= (horarios[k + 1] - horarios[k])
+    if trabalhado <= 0 or trabalhado > 720:
+        return jornada, f"{n} registros, horário suspeito — conferir"
+    return trabalhado, None
 
 # Lê arquivo
 wb = xlrd.open_workbook(ARQUIVO_ENTRADA)
-
-# Encontra aba
 aba = None
 for nome_aba in wb.sheet_names():
     if "log" in nome_aba.lower() or "comparec" in nome_aba.lower():
@@ -76,11 +61,12 @@ for nome_aba in wb.sheet_names():
 
 print(f"Aba: {aba.name}")
 
-# Extrai mês e ano do cabeçalho
+# Extrai mês e ano
 mes, ano = None, None
 for i in range(5):
-    for j in range(10):
-        val = str(aba.cell_value(i, j))
+    row = aba.row_values(i)
+    for val in row:
+        val = str(val).strip()
         if "~" in val and "/" in val:
             try:
                 data_str = val.split("~")[0].strip()
@@ -91,8 +77,7 @@ for i in range(5):
 
 print(f"Período: {mes}/{ano}")
 
-# Descobre quais colunas correspondem a quais dias
-# Usa a primeira linha de números (linha 3, índice 3)
+# Mapeamento coluna -> dia (usa primeira linha de números, índice 3)
 col_para_dia = {}
 row_dias = aba.row_values(3)
 for j, val in enumerate(row_dias):
@@ -110,36 +95,22 @@ funcionarios = {}
 
 for i in range(aba.nrows):
     row = aba.row_values(i)
-    row_str = " ".join([str(x) for x in row])
 
-    # Detecta linha de cabeçalho do funcionário
-    if "Nome" in row_str and "ID" in row_str and "Dept" in row_str:
-        # Extrai nome
-        nome = None
-        for j in range(len(row)):
-            if str(row[j]).strip() == "Nome":
-                for k in range(j + 1, min(j + 5, len(row))):
-                    val = str(row[k]).strip()
-                    if val and val != ":" and val != "Nome":
-                        nome = val
-                        break
-                break
+    # Detecta linha de cabeçalho: tem "ID :" na coluna 0
+    if str(row[0]).strip() == "ID :":
+        # Nome está na coluna 9
+        nome = str(row[9]).strip() if len(row) > 9 else None
 
         if not nome:
             continue
 
-        # Próxima linha com dados é a de horários
-        if i + 1 >= aba.nrows:
-            continue
-
-        # Pula linhas de números (1-20) até achar horários
+        # Próxima linha com horários
         linha_horarios = None
         for offset in range(1, 4):
             if i + offset >= aba.nrows:
                 break
             row_check = aba.row_values(i + offset)
             conteudo = [str(x).strip() for x in row_check if str(x).strip()]
-            # Se tem ":" é linha de horários
             if any(":" in c for c in conteudo):
                 linha_horarios = row_check
                 break
@@ -159,16 +130,17 @@ for i in range(aba.nrows):
             if col >= len(linha_horarios):
                 continue
 
-            dia_semana = datetime(ano, mes, dia).weekday()
+            try:
+                dia_semana = datetime(ano, mes, dia).weekday()
+            except:
+                continue
 
-            # Ignora domingo
             if dia_semana == 6:
                 continue
 
             jornada = JORNADA_SABADO if dia_semana == 5 else JORNADA_SEMANA
             funcionarios[nome]["total_esperado"] += jornada
 
-            # Extrai horários da célula (separados por \n)
             cell_val = str(linha_horarios[col]).strip()
             if not cell_val:
                 continue
