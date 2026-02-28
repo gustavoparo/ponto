@@ -1,9 +1,16 @@
 import xlrd
 import openpyxl
 from datetime import datetime
+import sys
+import os
 
-ARQUIVO_ENTRADA = "Todos os relatórios.xls"
-ARQUIVO_SAIDA = "resumo_ponto.xlsx"
+if len(sys.argv) > 1:
+    ARQUIVO_ENTRADA = sys.argv[1]
+else:
+    ARQUIVO_ENTRADA = input("Caminho do arquivo de ponto (.xls): ").strip().strip('"')
+
+pasta = os.path.dirname(os.path.abspath(ARQUIVO_ENTRADA))
+ARQUIVO_SAIDA = os.path.join(pasta, "resumo_ponto.xlsx")
 JORNADA_SEMANA = 8 * 60
 JORNADA_SABADO = 4 * 60
 DIAS_NOMES = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
@@ -252,3 +259,4 @@ for nome, f in sorted(funcionarios.items()):
 
 wb_out.save(ARQUIVO_SAIDA)
 print(f"\n✓ Salvo: {ARQUIVO_SAIDA}")
+input("\nPressione Enter para fechar...")
