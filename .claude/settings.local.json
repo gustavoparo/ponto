@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:claude.ai)"
+      "WebFetch(domain:claude.ai)",
+      "Bash(python ponto.py)",
+      "Bash(cd //wsl.localhost/Ubuntu/home/gustavo/ponto)",
+      "Bash(venv/Scripts/python ponto.py)",
+      "Bash(venv/bin/python ponto.py)",
+      "Bash(pip install xlrd)",
+      "Bash(wsl -e bash -c \"cd ~/ponto && source venv/bin/activate && python ponto.py\")"
     ]
   }
 }
